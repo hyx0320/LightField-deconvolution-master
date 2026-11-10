@@ -1,20 +1,67 @@
 function TOTALprojection = forwardProject_LFM( H, realspace)
+%% =========================================================================
+%% 函数功能：前向投影 (Forward Projection)
+%% 作用：将 3D 样本和 5D 点扩散函数(PSF)结合，模拟光场相机的物理成像过程，
+%%       计算出一张 2D 的光场原始照片。
+%% =========================================================================
+%% 输入参数：
+%  @H         : [5D 矩阵] 点扩散函数 (PSF)。
+%               维度依次为：(传感器高Y, 传感器宽X, 视角X, 视角Y, 深度Z)
+%               物理意义：记录了不同深度、不同视角下，一个理想光点糊成什么形状。
+%
+%  @realspace : [3D 矩阵] 当前模拟的三维样本 (待成像的物体)。
+%               维度依次为：(高Y, 宽X, 深度Z)
+%               物理意义：真实世界中发光的物体，矩阵中的数值代表该位置的发光强度。
+%
+%% 输出参数：
+%  @TOTALprojection : [2D 矩阵] 模拟出的二维光场原始照片。
+%                     维度依次为：(传感器高Y, 传感器宽X)
+%                     物理意义：传感器接收到的总光强，包含了所有深度和视角的光斑叠加。
+%% =========================================================================
 %% Robert's code
 %% Reference:  Robert Prevede, Young-Gyu Yoon, Maximilian Hoffmann, Nikita Pak.etc. 
 %% "Simultaneous whole-animal 3D imaging of neuronal activity using light-field microscopy " 
 %% in Nature Methods VOL.11 NO.7|July 2014.
-Nnum = size(H,3);
-zerospace = zeros(  size(realspace,1),   size(realspace,2));
-TOTALprojection = zerospace;
+    Nnum = size(H,3); % 获取微透镜阵列的视角分辨率（即每个微透镜下方覆盖的像素数，通常为13）
+    zerospace = zeros(  size(realspace,1),   size(realspace,2)); % 创建一个与三维物体XY尺寸相同的二维全零矩阵，
+    % 作为单次计算的"干净画布"
+    TOTALprojection = zerospace; % 初始化最终的二维光场照片（全黑），用于在后续循环中累加所有视角和深度的光斑。
+    % =========================================================================
+    % 【第 1、2 层循环】扫描微透镜的"视角"
+    % aa 代表微透镜阵列下的行，bb 代表列。
+    % 这两层循环结合，相当于固定了相机镜头的一个特定"观察角度"。
+    % =========================================================================
+    for aa=1:Nnum
+        for bb=1:Nnum
 
-for aa=1:Nnum
-    for bb=1:Nnum
-        for cc=1:size(realspace,3)          
-            Hs = squeeze(H( :,: ,aa,bb,cc));                  
-            tempspace = zerospace;
-            tempspace( (aa:Nnum:end), (bb:Nnum:end) ) = realspace( (aa:Nnum:end), (bb:Nnum:end), cc);
-            projection = conv2(tempspace, Hs, 'same');
-            TOTALprojection = TOTALprojection + projection;          
-        end
-    end
+            % =================================================================
+            % 【第 3 层循环】扫描三维物体的"深度"
+            % cc 代表当前扫描到 Z 轴的第几层（焦平面）。
+            % =================================================================
+            for cc=1:size(realspace,3)     
+
+                % 1. 从 5 维的 PSF 图鉴(H)里，精准抽出当前视角(aa,bb)和当前深度(cc)的 2D 光斑图(Hs)。
+                % 这个 Hs 代表了：这层深度的光，透过这个视角的微透镜，会糊成什么样。
+                Hs = squeeze(H( :,: ,aa,bb,cc));  
+
+                % 2. 每次循环都需要一个纯黑的初始画布，用来存放当前视角和深度的发光点。
+                tempspace = zerospace;
+
+                % 3. 微透镜视角采样，c层的3D样本映射到黑布上的光强。
+                % (aa:Nnum:end) 等于用"筛子"隔行隔列地挑像素。
+                tempspace( (aa:Nnum:end), (bb:Nnum:end) ) = realspace( (aa:Nnum:end), (bb:Nnum:end), cc);
+
+                % 4. 物理光学晕染 (卷积)
+                % 这一步完美等效于：模拟光点穿过镜头后，散开成模糊光斑的物理过程。
+                % 相当于：逐个点乘晕染 + 整体叠加 = 两个矩阵的二维卷积。'same'保证输出矩阵形状跟输入矩阵形状一致。
+                projection = conv2(tempspace, Hs, 'same');
+
+                % 5. 传感器曝光累加
+                % 它只会把接受到的所有光线"亮度"全部加在一起。
+                % 因此，把当前视角、当前深度晕染出的 2D 光斑，叠加到最终的总照片上。
+                TOTALprojection = TOTALprojection + projection;      
+
+            end % 深度(Z)扫描结束：相当于拍完了一个视角下的所有焦平面
+        end % 视角列(Y)扫描结束
+    end % 视角行(X)扫描结束
 end

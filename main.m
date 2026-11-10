@@ -21,7 +21,6 @@ load('Raw/light_field_data.mat');
 %    save('ReconResult_phase_space_deconv/Recon.mat','Output');
 %end
 
-Output=deconv_3D_RL(LF);
-save('ReconResult_3D_RL_deconv/Recon.mat','Output');
-%Output=deconv_phase_space(LF);
-%save('ReconResult_phase_space_deconv/Recon.mat','Output');
+
+
+Output=E_wuluoxuan(LF);
